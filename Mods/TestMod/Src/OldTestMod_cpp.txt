@@ -1,0 +1,1312 @@
+// Andrew Pratt 2021
+// TestMod
+
+#include "TestMod.h"
+#include<fstream>
+#include "Common.h"
+#include "Logging.h"
+#include "Events.h"
+#include "Glacier/ZActor.h"
+
+
+TestMod::TestMod()
+{
+}
+
+
+TestMod::~TestMod()
+{
+	const ZMemberDelegate<TestMod, void(const SGameUpdateEvent&)> s_Delegate(this, &TestMod::OnFrameUpdate);
+	Hooks::ZGameLoopManager_UnregisterFrameUpdate->Call(Globals::GameLoopManager, s_Delegate, 0, EUpdateMode::eUpdatePlayMode);
+}
+
+
+void TestMod::Init()
+{
+	Hooks::ZApplicationEngineWin32_MainWindowProc->AddDetour(this, &TestMod::WndProc);
+
+	Hooks::GetPropertyValue->AddDetour(this, &TestMod::GetPropertyValue);
+	Hooks::SetPropertyValue->AddDetour(this, &TestMod::SetPropertyValue);
+
+	Hooks::SignalOutputPin->AddDetour(this, &TestMod::SignalOutputPin);
+	Hooks::SignalInputPin->AddDetour(this, &TestMod::SignalInputPin);
+
+	Events::OnConsoleCommand->AddListener(this, &TestMod::OnConsoleCommand);
+}
+
+
+void TestMod::OnEngineInitialized()
+{
+	const ZMemberDelegate<TestMod, void(const SGameUpdateEvent&)> s_Delegate(this, &TestMod::OnFrameUpdate);
+	Hooks::ZGameLoopManager_RegisterFrameUpdate->Call(Globals::GameLoopManager, s_Delegate, 0, EUpdateMode::eUpdatePlayMode);
+}
+
+
+
+void TestMod::OnFrameUpdate(const SGameUpdateEvent& p_UpdateEvent)
+{
+	if (m_bDoingNpcTest)
+	{
+		Logger::Info("Running npc test this tick...");
+		DoNpcTestTick();
+	}
+}
+
+
+
+DECLARE_PLUGIN_DETOUR(TestMod, LRESULT, WndProc, ZApplicationEngineWin32* th, HWND p_Hwnd, UINT p_Message, WPARAM p_Wparam, LPARAM p_Lparam)
+{
+	if (p_Message == WM_KEYDOWN)
+	{
+		if (p_Wparam == VK_NUMPAD7)
+		{
+			const char* const s_NAME_FIND = "Nolan Cassidy";
+			const char* const s_NAME_REPLACE_WITH = "Janus";
+
+			ZActor* s_ActorFind = Globals::ActorManager->GetActorByName("");
+			if (s_ActorFind == nullptr)
+			{
+				Logger::Warn("Cannot find actor named \"{}\"", s_NAME_FIND);
+				return HookResult<LRESULT>(HookAction::Continue());
+			}
+
+			ZActor* s_ActorReplace = Globals::ActorManager->GetActorByName(s_NAME_REPLACE_WITH);
+			if (s_ActorReplace == nullptr)
+			{
+				Logger::Warn("Cannot find actor named \"{}\"", s_NAME_REPLACE_WITH);
+				return HookResult<LRESULT>(HookAction::Continue());
+			}
+
+			ZEntityRef s_FindEntRef;
+			ZEntityRef s_ReplaceEntRef;
+			s_ActorFind->GetID(&s_FindEntRef);
+			s_ActorReplace->GetID(&s_ReplaceEntRef);
+
+			ZVariant<ZRepositoryID> s_NewOutfit = s_ReplaceEntRef.GetProperty<ZRepositoryID>("m_OutfitRepositoryID");
+
+			if (s_NewOutfit.IsEmpty())
+			{
+				Logger::Warn("Cannot get outfit of actor named \"{}\"", s_NAME_REPLACE_WITH);
+				return HookResult<LRESULT>(HookAction::Continue());
+			}
+
+			s_FindEntRef.SetProperty("m_OutfitRepositoryID", s_NewOutfit.Get());
+
+			Logger::Info("Nolan={}\nJanus={}", s_ActorFind->m_nOutfitCharset, s_ActorReplace->m_nOutfitCharset);
+			Logger::Info("Replaced outfit for {} with outfit from {} which was {}", s_NAME_FIND, s_NAME_REPLACE_WITH, s_NewOutfit.Get().ToString());
+		}
+
+
+		else if (p_Wparam == VK_NUMPAD8)
+		{
+			const bool s_GET_BY_NAME = true;
+			const char* const s_NAME = "Jude Black";
+			const uint64_t s_ID = 7532604478590358344;
+
+			ZActor* s_Actor = nullptr;
+
+			if (s_GET_BY_NAME)
+			{
+				s_Actor = Globals::ActorManager->GetActorByName(s_NAME);
+				if (s_Actor == nullptr)
+				{
+					Logger::Warn("Cannot find actor named \"{}\"", s_NAME);
+					return HookResult<LRESULT>(HookAction::Continue());
+				}
+			}
+			else
+			{
+				s_Actor = Globals::ActorManager->GetActorById(s_ID);
+				if (s_Actor == nullptr)
+				{
+					Logger::Warn("Cannot find actor with id \"{}\"", s_ID);
+					return HookResult<LRESULT>(HookAction::Continue());
+				}
+			}
+
+			ZEntityRef s_EntRef;
+			s_Actor->GetID(&s_EntRef);
+
+			/*Logger::Info(">>>STAT LABELS<<<");
+			for (auto s_StatLabel : s_Actor->m_rCharacter.m_pInterfaceRef->m_StatLabelList)
+			{
+				try
+				{
+					Logger::Info("  \"{}\"", s_StatLabel.c_str());
+				}
+				catch (...)
+				{
+					Logger::Info(" <ERROR>");
+				}
+			}
+			Logger::Info("===================");*/
+
+			try
+			{
+				Logger::Info("Actor {} properties", s_Actor->m_sActorName.c_str());
+			}
+			catch (...) {}
+			DumpEntityProperties(s_EntRef);
+
+			try
+			{
+				TArray<TEntityRef<ZCostumeFeature>> s_Features;
+				s_Features = s_Actor->m_pCostumeFeatures.m_pInterfaceRef->m_aFeatures;
+
+				size_t i = 0;
+				for (auto s_Feature : s_Features)
+				{
+					ZEntityRef s_FeatureRef;
+					s_Feature.m_pInterfaceRef->GetID(&s_FeatureRef);
+					
+					Logger::Info("Feature {} properties", i);
+					DumpEntityProperties(s_FeatureRef);
+					++i;
+				}
+			}
+			catch (...)
+			{
+				Logger::Warn("Failed to get s_Features");
+			}
+		}
+
+
+		else if (p_Wparam == VK_NUMPAD9)
+		{
+			if (!m_bDoingNpcTest)
+			{
+				m_bDoingNpcTest = true;
+				Logger::Info("Starting npc test!");
+			}
+			else
+				Logger::Info("Npc test already running");
+
+			return HookResult<LRESULT>(HookAction::Continue());
+			
+
+
+			const char* const s_NAME = "Edward \"Ted\" Mendez";
+
+			ZActor* s_Actor = Globals::ActorManager->GetActorByName(s_NAME);
+			//ZActor* s_Actor = Globals::ActorManager->GetActorById(14030918964114243558);
+			if (s_Actor == nullptr)
+			{
+				Logger::Warn("Cannot find actor named \"{}\"", s_NAME);
+				return HookResult<LRESULT>(HookAction::Continue());
+			}
+			
+			ZEntityRef s_EntRef;
+			s_Actor->GetID(&s_EntRef);
+
+
+			//Logger::Info("ID: {}", (*s_EntRef.m_pEntity)->m_nEntityId);
+			//Logger::Info("NAME: {}", s_Actor->m_sActorName.c_str());
+
+			return HookResult<LRESULT>(HookAction::Continue());
+
+
+
+			size_t s_NullProperties = 0;
+			for (int i = 0; i < *Globals::NextActorId; ++i)
+			{
+				auto* s_Actor = Globals::ActorManager->m_aActiveActors[i].m_pInterfaceRef;
+
+				ZEntityRef s_EntRef;
+				s_Actor->GetID(&s_EntRef);
+
+				//ZVariant<EActorVoiceVariation> s_PropertyValue = s_EntRef.GetProperty<EActorVoiceVariation>("m_eRequiredVoiceVariation");
+				EActorVoiceVariation s_Value = s_Actor->m_eRequiredVoiceVariation;
+				if (s_Value == EActorVoiceVariation::eAVV_Undefined)
+				{
+					++s_NullProperties;
+					continue;
+				}
+
+				Logger::Info("{}: {}", s_Actor->m_sActorName.c_str(), s_Value);
+			}
+
+			Logger::Info("{} properties were null and therefore not printed", s_NullProperties);
+		}
+
+
+		else if (p_Wparam == VK_NUMPAD4)
+		{
+			const std::string s_FILE_NAME = "D:\\EpicGames\\HITMAN3\\Retail\\mods\\npc_name.txt";
+
+			std::ifstream s_IFile(s_FILE_NAME);
+
+			if (!s_IFile.is_open())
+			{
+				Logger::Warn("Failed to open file {}", s_FILE_NAME);
+				return HookResult<LRESULT>(HookAction::Continue());
+			}
+
+			std::string s_NpcName = "";
+
+			std::getline(s_IFile, s_NpcName);
+			s_IFile.close();
+
+			ZActor* s_SourceActor = Globals::ActorManager->GetActorByName(s_NpcName);
+			if (s_SourceActor == nullptr)
+			{
+				Logger::Warn("Cannot find actor named \"{}\"", s_NpcName);
+				return HookResult<LRESULT>(HookAction::Continue());
+			}
+
+			ZEntityRef s_SourceEntRef;
+			s_SourceActor->GetID(&s_SourceEntRef);
+
+			ZVariant<ZRepositoryID> s_NewOutfit = s_SourceEntRef.GetProperty<ZRepositoryID>("m_OutfitRepositoryID");
+
+			//ZVariant<EActorVoiceVariation> s_NewVoice = s_SourceEntRef.GetProperty<EActorVoiceVariation>("m_eRequiredVoiceVariation");
+			EActorVoiceVariation s_NewVoice = s_SourceActor->m_eRequiredVoiceVariation;
+			bool s_bReplaceVoice = true;
+			//if (s_NewVoice.Get() == EActorVoiceVariation::eAVV_Undefined)
+			if (s_NewVoice == EActorVoiceVariation::eAVV_Undefined)
+				s_bReplaceVoice = false;
+
+			Logger::Info("Replacing with {}...", s_NpcName);
+
+			for (int i = 0; i < *Globals::NextActorId; ++i)
+			{
+				auto* s_Actor = Globals::ActorManager->m_aActiveActors[i].m_pInterfaceRef;
+
+				ZEntityRef s_EntRef;
+				s_Actor->GetID(&s_EntRef);
+
+				s_EntRef.SetProperty("m_OutfitRepositoryID", s_NewOutfit.Get());
+
+				//if (s_bReplaceVoice && s_EntRef.GetProperty<EActorVoiceVariation>("m_eRequiredVoiceVariation").Get() != EActorVoiceVariation::eAVV_Undefined)
+				if (s_bReplaceVoice && s_Actor->m_eRequiredVoiceVariation != EActorVoiceVariation::eAVV_Undefined)
+					//s_EntRef.SetProperty("m_eRequiredVoiceVariation", s_NewVoice.Get());
+					s_Actor->m_eRequiredVoiceVariation = s_NewVoice;
+			}
+
+			Logger::Info("Replaced");
+		}
+
+
+		else if (p_Wparam == VK_NUMPAD5)
+		{
+			m_bLogPins = !m_bLogPins;
+
+			if (m_bLogPins)
+				Logger::Info("Pin logging enabled");
+			else
+				Logger::Info("Pin logging disabled");
+		}
+
+		else if (p_Wparam == VK_NUMPAD6)
+		{
+		s_bDoNpcPinLogging = !s_bDoNpcPinLogging;
+
+		if (s_bDoNpcPinLogging)
+			Logger::Info("NPC pin logging enabled");
+		else
+			Logger::Info("NPC pin logging disabled");
+		}
+
+
+		else if (p_Wparam == VK_NUMPAD1)
+		{
+			Logger::Info("Npc test pulse!");
+			DoNpcTestTick();
+
+			return HookResult<LRESULT>(HookAction::Continue());
+		}
+
+
+		else if (p_Wparam == VK_SUBTRACT)
+		{
+			Logger::Info("");
+		}
+	}
+
+	return HookResult<LRESULT>(HookAction::Continue());
+}
+
+
+
+DECLARE_PLUGIN_DETOUR(TestMod, bool, GetPropertyValue, ZEntityRef p_Entity, uint32_t p_PropertyId, void* p_Output)
+{
+	return HookResult<bool>(HookAction::Continue());
+	//Logger::Info("\t\t\t(not it) get ent id: [{}]\nPropertyId: ", (*p_Entity.m_pEntity)->m_nEntityId, p_PropertyId);
+
+	switch (p_PropertyId)
+	{
+	case 2727807173:
+	case 665133514:
+	case 386469282:
+	case 2229210419:
+	case 2800401693:
+	case 94015814:
+	case 2734288667:
+	case 1995536587:
+	case 2114977724:	//m_bPosPinOnTransformChange
+	case 1448929088:	//m_CameraTransform
+	case 1199065860:	//m_bItemUpdateTransformChange
+	case 289217035:		//m_mTransform
+	case 448134596:		//m_rMoveToTransform
+	case 2420189719:	//m_rOrientToTransform
+	case 1918961610:	//m_rWorldTransform
+	case 3124983858:	//m_bReplicateTransform
+	case 232630790:		//m_rTransformParent
+	case 3227381757:	//m_bUseTransformYAsTangents
+	case 2545438628:	//m_AnchorTransforms
+	case 410385418:		//m_bAttachToAnchorTransform
+	case 312459494:		//m_rTransformReference
+	case 3437957664:	//m_vOriginalEntityTransform
+	case 552794069:		//m_vTargetStartTransform
+	case 752052081:		//m_rAnchorTransform
+	case 1840958087:	//m_rClosetTransform
+	case 4093100303:	//m_rApplyTransformToSpatial
+	case 29110264:		//m_bUpdateTransform
+		break;
+	default:
+		return HookResult<bool>(HookAction::Continue());
+	}
+
+	Logger::Info("Get ENT ID: [{}]\nPropertyId: ", (*p_Entity.m_pEntity)->m_nEntityId, p_PropertyId);
+
+	return HookResult<bool>(HookAction::Continue());
+}
+
+DECLARE_PLUGIN_DETOUR(TestMod, bool, SetPropertyValue, ZEntityRef p_Entity, uint32_t p_PropertyId, const ZObjectRef& p_Value, bool p_InvokeChangeHandlers)
+{
+	return HookResult<bool>(HookAction::Continue());
+	//Logger::Info("\t\t\t(not it) set ent id: [{}]\nPropertyId: ", (*p_Entity.m_pEntity)->m_nEntityId, p_PropertyId);
+
+	switch (p_PropertyId)
+	{
+	case 2727807173:
+	case 665133514:
+	case 386469282:
+	case 2229210419:
+	case 2800401693:
+	case 94015814:
+	case 2734288667:
+	case 1995536587:
+	case 2114977724:	//m_bPosPinOnTransformChange
+	case 1448929088:	//m_CameraTransform
+	case 1199065860:	//m_bItemUpdateTransformChange
+	case 289217035:		//m_mTransform
+	case 448134596:		//m_rMoveToTransform
+	case 2420189719:	//m_rOrientToTransform
+	case 1918961610:	//m_rWorldTransform
+	case 3124983858:	//m_bReplicateTransform
+	case 232630790:		//m_rTransformParent
+	case 3227381757:	//m_bUseTransformYAsTangents
+	case 2545438628:	//m_AnchorTransforms
+	case 410385418:		//m_bAttachToAnchorTransform
+	case 312459494:		//m_rTransformReference
+	case 3437957664:	//m_vOriginalEntityTransform
+	case 552794069:		//m_vTargetStartTransform
+	case 752052081:		//m_rAnchorTransform
+	case 1840958087:	//m_rClosetTransform
+	case 4093100303:	//m_rApplyTransformToSpatial
+	case 29110264:		//m_bUpdateTransform
+		break;
+	default:
+		return HookResult<bool>(HookAction::Continue());
+	}
+
+	uint64_t s_EntId = (*p_Entity.m_pEntity)->m_nEntityId;
+
+	/*ZActor* s_Actor = Globals::ActorManager->GetActorById(s_EntId);
+	if (s_Actor == nullptr)
+	{
+		Logger::Info("NOT AN NPC!!!");
+		DumpEntityProperties(p_Entity);
+		Logger::Info("\n");
+	}*/
+
+	SMatrix43* s_MatrixVal = p_Value.As<SMatrix43>();
+
+	if (s_MatrixVal == nullptr) return HookResult<bool>(HookAction::Continue());
+
+	float32 s_Height = s_MatrixVal->Trans.z;
+
+	if (s_Height > 20.0)
+	{
+		Logger::Info("HIGH ENT!: {}\n\t@{}", s_EntId, s_Height);
+	}
+
+	Logger::Info("Set ENT ID: [{}]\nPropertyId: ", s_EntId, p_PropertyId);
+	/*if (p_PropertyId == 2800401693)
+		Logger::Info("Set ENT ID: [{}]\nPropertyId: \n>>>>>>>>> Outfit: ", s_EntId, p_PropertyId, p_Value.As<ZRepositoryID>()->ToString());
+	else
+		Logger::Info("Set ENT ID: [{}]\nPropertyId: ", s_EntId, p_PropertyId);*/
+
+	return HookResult<bool>(HookAction::Continue());
+}
+
+
+
+DECLARE_PLUGIN_DETOUR(TestMod, bool, SignalOutputPin, ZEntityRef p_Entity, uint32_t p_PinId, const ZObjectRef& p_Data)
+{
+	if (!s_bDoNpcPinLogging) return HookResult<bool>(HookAction::Continue());
+
+	const char* const s_NAME = "Nolan Cassidy";
+	const char* const s_OUT_FILE_PATH = "D:\\EpicGames\\HITMAN3\\Retail\\mods\\npc_olog.txt";
+	static ZActor* s_LogActor = nullptr;
+	static uint64_t s_LogEntId = NULL;
+	static std::ofstream s_OutFile;
+	
+	if (s_LogActor == nullptr)
+	{
+		s_LogActor = Globals::ActorManager->GetActorByName(s_NAME);
+		if (s_LogActor == nullptr)
+		{
+			Logger::Warn("Cannot find actor named \"{}\"", s_NAME);
+			s_bDoNpcPinLogging = false;
+			return HookResult<bool>(HookAction::Continue());
+		}
+		Logger::Warn("Found actor named \"{}\" for logging output", s_NAME);
+		ZEntityRef s_LogEntRef;
+		s_LogActor->GetID(&s_LogEntRef);
+		s_LogEntId = (*s_LogEntRef.m_pEntity)->m_nEntityId;
+
+
+		s_OutFile.open(s_OUT_FILE_PATH);
+
+		if (!s_OutFile.is_open())
+		{
+			Logger::Warn("Cannot open file \"{}\"", s_OUT_FILE_PATH);
+			s_bDoNpcPinLogging = false;
+			return HookResult<bool>(HookAction::Continue());
+		}
+
+		s_OutFile << "Output for npc \"" << s_NAME << '\"' << std::endl;
+	}
+
+	
+	uint64_t s_EntId = (*p_Entity.m_pEntity)->m_nEntityId;
+
+	if (s_LogEntId != s_EntId)
+		return HookResult<bool>(HookAction::Continue());
+
+	s_OutFile << "Output Pin #" << p_PinId << ';' << std::endl;
+	Logger::Info("Wrote output pin #{}", p_PinId);
+
+
+	/*char foo;
+	if (p_PinId == 3851908789)
+	{
+		foo = 'a';
+	}
+
+
+	if (!m_bLogPins) return HookResult<bool>(HookAction::Continue());
+
+	uint64_t s_EntId = (*p_Entity.m_pEntity)->m_nEntityId;
+
+	if (m_DumpedEnts.size() >= m_DumpedEnts.max_size()) return HookResult<bool>(HookAction::Continue());
+	if (!m_DumpedEnts.empty())
+	{
+		for (auto s_DumpedEntId : m_DumpedEnts)
+		{
+			if (s_DumpedEntId == s_EntId)
+				return HookResult<bool>(HookAction::Continue());
+		}
+	}
+
+	m_DumpedEnts.push_back(s_EntId);
+
+	const char* s_DataTypeName;
+	try
+	{
+		s_DataTypeName = p_Data.As<STypeID>()->m_pType->m_pTypeName;
+		if (!s_DataTypeName)
+			s_DataTypeName = "<NULL TYPE>";
+		else if (s_DataTypeName[0] == 0)
+			s_DataTypeName = "<NO TYPE NAME>";
+	}
+	catch (...)
+	{
+		s_DataTypeName = "<ERROR TYPE>";
+	}
+
+	if (!s_DataTypeName)
+		s_DataTypeName = "<NULL TYPE>";
+
+
+	std::string s_DataValueStr;
+	try
+	{
+		s_DataValueStr = PropertyDataToString(s_DataTypeName, p_Data.As<void>());
+		if (s_DataValueStr.empty())
+			s_DataValueStr = "<NO DATA>";
+	}
+	catch (...)
+	{
+		s_DataValueStr = "<ERROR DATA>";
+	}
+
+	//Logger::Info("=OUTPUT PIN SIGNALED=\tEntId: {}\tPin: {}\t{}\t= {}\n", s_EntId, p_PinId, s_DataTypeName, s_DataValueStr);
+
+
+	if (m_DumpedPins.size() >= m_DumpedPins.max_size()) return HookResult<bool>(HookAction::Continue());
+	if (!m_DumpedPins.empty())
+	{
+		for (auto s_DumpedPinId : m_DumpedPins)
+		{
+			if (s_DumpedPinId == p_PinId)
+				return HookResult<bool>(HookAction::Continue());
+		}
+	}
+
+	m_DumpedPins.push_back(p_PinId);
+
+	Logger::Info("=OUTPUT PIN SIGNALED=\tEntId: {}\tPin: {}\t{}\t= {}", s_EntId, p_PinId, s_DataTypeName, s_DataValueStr);
+
+	DumpEntityProperties(p_Entity);*/
+
+	return HookResult<bool>(HookAction::Continue());
+}
+
+
+DECLARE_PLUGIN_DETOUR(TestMod, bool, SignalInputPin, ZEntityRef p_Entity, uint32_t p_PinId, const ZObjectRef& p_Data)
+{
+	if (!s_bDoNpcPinLogging) return HookResult<bool>(HookAction::Continue());
+
+	const char* const s_NAME = "Nolan Cassidy";
+	const char* const s_OUT_FILE_PATH = "D:\\EpicGames\\HITMAN3\\Retail\\mods\\npc_ilog.txt";
+	static ZActor* s_LogActor = nullptr;
+	static uint64_t s_LogEntId = NULL;
+	static std::ofstream s_OutFile;
+
+	if (s_LogActor == nullptr)
+	{
+		s_LogActor = Globals::ActorManager->GetActorByName(s_NAME);
+		if (s_LogActor == nullptr)
+		{
+			Logger::Warn("Cannot find actor named \"{}\"", s_NAME);
+			s_bDoNpcPinLogging = false;
+			return HookResult<bool>(HookAction::Continue());
+		}
+		Logger::Warn("Found actor named \"{}\" for logging input", s_NAME);
+		ZEntityRef s_LogEntRef;
+		s_LogActor->GetID(&s_LogEntRef);
+		s_LogEntId = (*s_LogEntRef.m_pEntity)->m_nEntityId;
+
+
+		s_OutFile.open(s_OUT_FILE_PATH);
+
+		if (!s_OutFile.is_open())
+		{
+			Logger::Warn("Cannot open file \"{}\"", s_OUT_FILE_PATH);
+			s_bDoNpcPinLogging = false;
+			return HookResult<bool>(HookAction::Continue());
+		}
+
+		s_OutFile << "Input for npc \"" << s_NAME << '\"' << std::endl;
+	}
+
+
+	uint64_t s_EntId = (*p_Entity.m_pEntity)->m_nEntityId;
+
+	if (s_LogEntId != s_EntId)
+		return HookResult<bool>(HookAction::Continue());
+
+	s_OutFile << "Output Pin #" << p_PinId << ';' << std::endl;
+	Logger::Info("Wrote output pin #{}", p_PinId);
+
+	/*char foo;
+	if (p_PinId == 3851908789)
+	{
+		foo = 'a';
+	}
+
+	if (!m_bLogPins) return HookResult<bool>(HookAction::Continue());
+
+	uint64_t s_EntId = (*p_Entity.m_pEntity)->m_nEntityId;
+
+	if (m_DumpedEnts.size() >= m_DumpedEnts.max_size()) return HookResult<bool>(HookAction::Continue());
+	if (!m_DumpedEnts.empty())
+	{
+		for (auto s_DumpedEntId : m_DumpedEnts)
+		{
+			if (s_DumpedEntId == s_EntId)
+				return HookResult<bool>(HookAction::Continue());
+		}
+	}
+
+	m_DumpedEnts.push_back(s_EntId);
+
+
+	Logger::Info("=INPUT PIN SIGNALED=\tEntId: {}\tPinId: {}\n", s_EntId, p_PinId);
+
+
+	if (m_DumpedPins.size() >= m_DumpedPins.max_size()) return HookResult<bool>(HookAction::Continue());
+	if (!m_DumpedPins.empty())
+	{
+		for (auto s_DumpedPinId : m_DumpedPins)
+		{
+			if (s_DumpedPinId == p_PinId)
+				return HookResult<bool>(HookAction::Continue());
+		}
+	}
+
+	m_DumpedPins.push_back(p_PinId);
+
+	DumpEntityProperties(p_Entity);*/
+
+	return HookResult<bool>(HookAction::Continue());
+}
+
+
+
+float32 TestMod::cosf32(double p_X)
+{
+	return static_cast<float32>(cos(p_X));
+}
+
+float32 TestMod::cosf32(float32 p_X)
+{
+	return cosf32(static_cast<double>(p_X));
+}
+
+float32 TestMod::sinf32(double p_X)
+{
+	return static_cast<float32>(sin(p_X));
+}
+
+float32 TestMod::sinf32(float32 p_X)
+{
+	return sinf32(static_cast<double>(p_X));
+}
+
+
+
+void TestMod::DumpEntityProperties(ZEntityRef& p_Ent)
+{
+	auto& s_Properties = (*p_Ent.m_pEntity)->m_pProperties01;
+
+	if (!s_Properties)
+	{
+		Logger::Info("<No Properties>");
+		return;
+	}
+
+	Logger::Info("{");
+	for (auto& s_Property : *s_Properties)
+	{
+		uint32_t s_PropertyId = s_Property.m_nPropertyId;
+		ZClassProperty* s_PropertyInfo = s_Property.m_pType->getPropertyInfo();
+
+		const char* s_PropertyName;
+		try
+		{
+			s_PropertyName = s_PropertyInfo->m_pName;
+			if (!s_PropertyName)
+				s_PropertyName = "<ERROR>";
+			else if (s_PropertyName[0] == 0)
+				s_PropertyName = "<NO NAME>";
+		}
+		catch (...)
+		{
+			s_PropertyName = "<ERROR>";
+		}
+
+		const char* s_PropertyTypeName;
+		try
+		{
+			s_PropertyTypeName = s_PropertyInfo->m_pType->m_pType->m_pTypeName;
+			if (!s_PropertyTypeName)
+				s_PropertyTypeName = "<NULL TYPE NAME>";
+			else if (s_PropertyTypeName[0] == 0)
+				s_PropertyTypeName = "<NO TYPE NAME>";
+		}
+		catch (...)
+		{
+			s_PropertyTypeName = "<ERROR TYPE>";
+		}
+
+		if (!s_PropertyName)
+			s_PropertyName = "<NULL>";
+
+		if (!s_PropertyTypeName)
+			s_PropertyTypeName = "<NULL TYPE NAME>";
+
+		Logger::Info("\tId = {}\n\t{} {}\n", s_PropertyId, s_PropertyTypeName, s_PropertyName);
+
+		if (strcmp(s_PropertyName, "m_rHitmanCharacter") == 0)
+		{
+			Logger::Info("HITMAN!!!");
+		}
+	}
+	Logger::Info("}");
+}
+
+
+
+DECLARE_PLUGIN_LISTENER(TestMod, OnConsoleCommand)
+{
+	//Logger::Debug("On console command!");
+}
+
+
+
+#pragma region PropertyDataToStringSection
+std::string TestMod::PropertyDataToString(const std::string& p_TypeName, void* p_Data)
+{
+	std::string s_DataStr;
+
+	// TODO: Make this cleaner
+	if (p_TypeName == "float32")
+		s_DataStr = std::to_string(*static_cast<float32*>(p_Data));
+
+	else if (p_TypeName == "bool")
+		s_DataStr = std::to_string(*static_cast<bool*>(p_Data));
+
+	else if (p_TypeName == "int16")
+		s_DataStr = std::to_string(*static_cast<int32*>(p_Data));
+
+	else if (p_TypeName == "int32")
+		s_DataStr = std::to_string(*static_cast<int32*>(p_Data));
+
+	else if (p_TypeName == "int64")
+		s_DataStr = std::to_string(*static_cast<int32*>(p_Data));
+
+	else if (p_TypeName == "SVector3")
+	{
+		auto s_CastedData = static_cast<SVector3*>(p_Data);
+
+		s_DataStr = ToString(*s_CastedData);
+	}
+
+	else if (p_TypeName == "SMatrix43")
+	{
+		auto s_CastedData = static_cast<SMatrix43*>(p_Data);
+
+		s_DataStr = ToString(*s_CastedData);
+	}
+
+	else if (p_TypeName == "ZString")
+	{
+		auto s_CastedData = static_cast<ZString*>(p_Data);
+
+		s_DataStr = ToString(*s_CastedData);
+	}
+
+	else if (p_TypeName == "ZActBehaviorEntity.EState")
+	{
+		auto s_CastedData = static_cast<ZActBehaviorEntity::EState*>(p_Data);
+
+		s_DataStr = ToString(*s_CastedData);
+	}
+
+	else if (p_TypeName == "ZResourcePtr")
+	{
+		auto s_CastedData = static_cast<ZResourcePtr*>(p_Data);
+
+		s_DataStr = ToString(*s_CastedData);
+	}
+
+	else if (p_TypeName == "TEntityRef<ZSpatialEntity>")
+	{
+		auto s_CastedData = static_cast<TEntityRef<ZSpatialEntity>*>(p_Data);
+
+		s_DataStr = ToString(*s_CastedData);
+	}
+
+	else if (p_TypeName == "TEntityRef<ZResourcePtr>")
+	{
+		auto s_CastedData = static_cast<TEntityRef<ZResourcePtr>*>(p_Data);
+
+		s_DataStr = ToString(*s_CastedData);
+	}
+
+	else if (p_TypeName == "TEntityRef<ZActorInstanceEntity>")
+	{
+		auto s_CastedData = static_cast<TEntityRef<ZActorInstanceEntity>*>(p_Data);
+
+		s_DataStr = ToString(*s_CastedData);
+	}
+
+	else
+		s_DataStr = "???";
+
+
+	return s_DataStr;
+}
+
+
+
+std::string TestMod::ToString(const SVector3& v)
+{
+	std::string s_DataStr = "vec3(";
+	s_DataStr += std::to_string(v.x);
+	s_DataStr += ", ";
+	s_DataStr += std::to_string(v.y);
+	s_DataStr += ", ";
+	s_DataStr += std::to_string(v.z);
+	s_DataStr += ")";
+
+	return s_DataStr;
+}
+
+std::string TestMod::ToString(const SMatrix43& v)
+{
+	// TODO: Single line version?
+	std::string s_DataStr = "mat4x3:\n{\n  x: ";
+	s_DataStr += ToString(v.XAxis);
+	s_DataStr += "\n  y: ";
+	s_DataStr += ToString(v.YAxis);
+	s_DataStr += "\n  z: ";
+	s_DataStr += ToString(v.ZAxis);
+	s_DataStr += "\n  t: ";
+	s_DataStr += ToString(v.Trans);
+	s_DataStr += "\n}";
+
+	return s_DataStr;
+}
+
+std::string TestMod::ToString(const ZString& v)
+{
+	const char* s_DataStr = v.c_str();
+	if (!s_DataStr) return "<CSTR ERROR>";
+	return s_DataStr;
+}
+
+std::string TestMod::ToString(const ZActBehaviorEntity::EState& v)
+{
+	switch (v)
+	{
+	case ZActBehaviorEntity::EState::UNDEFINED:
+		return "UNDEFINED";
+		break;
+	case ZActBehaviorEntity::EState::IDLE:
+		return "IDLE";
+		break;
+	case ZActBehaviorEntity::EState::STOPPING:
+		return "STOPPING";
+		break;
+	case ZActBehaviorEntity::EState::PREPARING:
+		return "PREPARING";
+		break;
+	case ZActBehaviorEntity::EState::MOVING:
+		return "MOVING";
+		break;
+	case ZActBehaviorEntity::EState::ENTERING:
+		return "ENTERING";
+		break;
+	case ZActBehaviorEntity::EState::RUNNING:
+		return "RUNNING";
+		break;
+	case ZActBehaviorEntity::EState::TIMEDOUT:
+		return "TIMEDOUT";
+		break;
+	case ZActBehaviorEntity::EState::COMPLETE:
+		return "COMPLETE";
+		break;
+	default:
+		return "<INVALID!>";
+	}
+}
+
+std::string TestMod::ToString(const ZSpatialEntity& v)
+{
+	// TODO: Single line version?
+	std::string s_DataStr = "ZSpatialEntity\n{\n  ZSpatialEntity::ERoomBehaviour\tm_eRoomBehaviour:\t";
+	s_DataStr += ToString(v.m_eRoomBehaviour);
+	s_DataStr += "\n  bool\tm_bForceVisible:\t";
+	s_DataStr += std::to_string(v.m_bForceVisible);
+	s_DataStr += "\n  SMatrix43\tm_mTransform:\t";
+	s_DataStr += ToString(v.m_mTransform);
+	s_DataStr += "\n  bool\tm_bVisible:\t";
+	s_DataStr += std::to_string(v.m_bVisible);
+	s_DataStr += "\n  bool\tm_bIsPrivate:\t";
+	s_DataStr += std::to_string(v.m_bIsPrivate);
+	s_DataStr += "\n  bool\tm_bVisibleInBoxReflection:\t";
+	s_DataStr += std::to_string(v.m_bVisibleInBoxReflection);
+	s_DataStr += "\n  bool\tm_bEnableTAA:\t";
+	s_DataStr += std::to_string(v.m_bVisible);
+	s_DataStr += "\n  uint8\tm_nViewportVisibility:\t";
+	s_DataStr += std::to_string(v.m_nViewportVisibility);
+	s_DataStr += "\n  TEntityRef<ZSpatialEntity>\tm_eidParent:\t";
+	s_DataStr += ToString(v.m_eidParent);
+	s_DataStr += "\n}";
+
+	return s_DataStr;
+}
+
+std::string TestMod::ToString(const ZSpatialEntity::ERoomBehaviour& v)
+{
+	switch (v)
+	{
+	case ZSpatialEntity::ERoomBehaviour::ROOM_STATIC:
+		return "ROOM_STATIC";
+		break;
+	case ZSpatialEntity::ERoomBehaviour::ROOM_DYNAMIC:
+		return "IDLE";
+		break;
+	case ZSpatialEntity::ERoomBehaviour::ROOM_STATIC_OUTSIDE_CLIENT:
+		return "STOPPING";
+		break;
+	default:
+		return "<INVALID!>";
+	}
+}
+
+std::string TestMod::ToString(const ZResourcePtr& v)
+{
+	return std::to_string(v.m_nResourceIndex);
+}
+
+std::string TestMod::ToString(const ZActorInstanceEntity& v)
+{
+	std::string s_DataStr = "ZActorInstanceEntity(\"";
+	s_DataStr += ToString(v.m_animationName);
+	return std::string();
+}
+
+
+std::string TestMod::ToString(const TEntityRef<ZSpatialEntity>& v)
+{
+	std::string s_DataStr = "Entity Ref: ";
+	//return std::string(s_DataStr + ToString(*v.m_pInterfaceRef));
+	return "Ref to ZSpatialEntity";
+}
+
+std::string TestMod::ToString(const TEntityRef<ZResourcePtr>& v)
+{
+	std::string s_DataStr = "Entity Ref: ";
+	return std::string(s_DataStr + ToString(*v.m_pInterfaceRef));
+}
+
+std::string TestMod::ToString(const TEntityRef<ZActorInstanceEntity>& v)
+{
+	std::string s_DataStr = "Entity Ref: ";
+	return std::string(s_DataStr + ToString(*v.m_pInterfaceRef));
+}
+#pragma endregion
+
+
+void TestMod::DoNpcTestTick()
+{
+	//const char* const s_NAME = "Edward \"Ted\" Mendez";
+	//const char* const s_NAME = "Jude Black";
+	const char* const s_NAME = "Dennis Elliot";
+
+	ZActor* s_Actor = Globals::ActorManager->GetActorByName(s_NAME);
+	if (s_Actor == nullptr)
+	{
+		Logger::Warn("Cannot find actor named \"{}\"", s_NAME);
+		m_bDoneFirstNpcTest = false;
+		m_bDoingNpcTest = false;
+		return;
+	}
+
+#pragma region Define
+	static bool s_bFirstUnk00;
+	static bool s_bFirstUnk01;
+	static bool s_bFirstUnk02;
+	static bool s_bFirstUnk03;
+	static bool s_bFirstUnk04;
+	static bool s_bFirstUnk05;
+	static bool s_bFirstIsBeingDragged;
+	static bool s_bFirstIsBeingDumped;
+	static bool s_bFirstUnk08;
+	static bool s_bFirstUnk09;
+	static bool s_bFirstUnk10;
+	static bool s_bFirstUnk11;
+	static bool s_bFirstUnk12;
+	static bool s_bFirstUnk13;
+	static bool s_bFirstUnk14;
+	static bool s_bFirstUnk15;
+	static bool s_bFirstUnk16;
+	static bool s_bFirstUnk17;
+	static bool s_bFirstUnk18;
+	static bool s_bFirstUnk19;
+	static bool s_bFirstUnk20;
+	static bool s_bFirstUnk21;
+	static bool s_bFirstUnk22;
+	static bool s_bFirstUnk23;
+	static bool s_bFirstUnk24;
+	static bool s_bFirstUnk25;
+	static bool s_bFirstUnk26;
+	static bool s_bFirstUnk27;
+	static bool s_bFirstUnk28;
+	static bool s_bFirstUnk29;
+	static bool s_bFirstUnk30;
+	static bool s_bFirstUnk31;
+	static bool s_bFirstUnk32;
+	static bool s_bFirstUnk33;
+	static bool s_bFirstBodyHidden;
+	static bool s_bFirstUnk35;
+	static bool s_bFirstUnk36;
+	static bool s_bFirstUnk37;
+	static bool s_bFirstUnk38;
+	static bool s_bFirstUnk39;
+#pragma endregion
+
+
+	if (!m_bDoneFirstNpcTest)
+	{
+		m_bDoneFirstNpcTest = true;
+#pragma region Assign First
+		s_bFirstUnk00 = s_Actor->m_bUnk00;
+		s_bFirstUnk01 = s_Actor->m_bUnk01;
+		s_bFirstUnk02 = s_Actor->m_bUnk02;
+		s_bFirstUnk03 = s_Actor->m_bUnk03;
+		s_bFirstUnk04 = s_Actor->m_bUnk04;
+		s_bFirstUnk05 = s_Actor->m_bUnk05;
+		s_bFirstIsBeingDragged = s_Actor->m_bIsBeingDragged;
+		s_bFirstIsBeingDumped = s_Actor->m_bIsBeingDumped;
+		s_bFirstUnk08 = s_Actor->m_bUnk08;
+		s_bFirstUnk09 = s_Actor->m_bUnk09;
+		s_bFirstUnk10 = s_Actor->m_bUnk10;
+		s_bFirstUnk11 = s_Actor->m_bUnk11;
+		s_bFirstUnk12 = s_Actor->m_bUnk12;
+		s_bFirstUnk13 = s_Actor->m_bUnk13;
+		s_bFirstUnk14 = s_Actor->m_bUnk14;
+		s_bFirstUnk15 = s_Actor->m_bUnk15;
+		s_bFirstUnk16 = s_Actor->m_bUnk16;
+		s_bFirstUnk17 = s_Actor->m_bUnk17;
+		s_bFirstUnk18 = s_Actor->m_bUnk18;
+		s_bFirstUnk19 = s_Actor->m_bUnk19;
+		s_bFirstUnk20 = s_Actor->m_bUnk20;
+		s_bFirstUnk21 = s_Actor->m_bUnk21;
+		s_bFirstUnk22 = s_Actor->m_bUnk22;
+		s_bFirstUnk23 = s_Actor->m_bUnk23;
+		s_bFirstUnk24 = s_Actor->m_bUnk24;
+		s_bFirstUnk25 = s_Actor->m_bUnk25;
+		s_bFirstUnk26 = s_Actor->m_bUnk26;
+		s_bFirstUnk27 = s_Actor->m_bUnk27;
+		s_bFirstUnk28 = s_Actor->m_bUnk28;
+		s_bFirstUnk29 = s_Actor->m_bUnk29;
+		s_bFirstUnk30 = s_Actor->m_bUnk30;
+		s_bFirstUnk31 = s_Actor->m_bUnk31;
+		s_bFirstUnk32 = s_Actor->m_bUnk32;
+		s_bFirstUnk33 = s_Actor->m_bUnk33;
+		s_bFirstBodyHidden = s_Actor->m_bBodyHidden;
+		s_bFirstUnk35 = s_Actor->m_bUnk35;
+		s_bFirstUnk36 = s_Actor->m_bUnk36;
+		s_bFirstUnk37 = s_Actor->m_bUnk37;
+		s_bFirstUnk38 = s_Actor->m_bUnk38;
+		s_bFirstUnk39 = s_Actor->m_bUnk39;
+#pragma endregion
+		Logger::Info("First set!");
+		return;
+	}
+
+#pragma region Test
+	if (s_bFirstUnk00 != s_Actor->m_bUnk00)	Logger::Info("CHANGE for m_bUnk00: {} -> {}", s_bFirstUnk00, s_Actor->m_bUnk00);
+	if (s_bFirstUnk01 != s_Actor->m_bUnk01)	Logger::Info("CHANGE for m_bUnk01: {} -> {}", s_bFirstUnk01, s_Actor->m_bUnk01);
+	if (s_bFirstUnk02 != s_Actor->m_bUnk02)	Logger::Info("CHANGE for m_bUnk02: {} -> {}", s_bFirstUnk02, s_Actor->m_bUnk02);
+	if (s_bFirstUnk03 != s_Actor->m_bUnk03)	Logger::Info("CHANGE for m_bUnk03: {} -> {}", s_bFirstUnk03, s_Actor->m_bUnk03);
+	if (s_bFirstUnk04 != s_Actor->m_bUnk04)	Logger::Info("CHANGE for m_bUnk04: {} -> {}", s_bFirstUnk04, s_Actor->m_bUnk04);
+	if (s_bFirstUnk05 != s_Actor->m_bUnk05)	Logger::Info("CHANGE for m_bUnk05: {} -> {}", s_bFirstUnk05, s_Actor->m_bUnk05);
+	if (s_bFirstIsBeingDragged != s_Actor->m_bIsBeingDragged)	Logger::Info("CHANGE for m_bIsBeingDragged: {} -> {}", s_bFirstIsBeingDragged, s_Actor->m_bIsBeingDragged);
+	if (s_bFirstIsBeingDumped != s_Actor->m_bIsBeingDumped)	Logger::Info("CHANGE for m_bIsBeingDumped: {} -> {}", s_bFirstIsBeingDumped, s_Actor->m_bIsBeingDumped);
+	if (s_bFirstUnk08 != s_Actor->m_bUnk08)	Logger::Info("CHANGE for m_bUnk08: {} -> {}", s_bFirstUnk08, s_Actor->m_bUnk08);
+	if (s_bFirstUnk09 != s_Actor->m_bUnk09)	Logger::Info("CHANGE for m_bUnk09: {} -> {}", s_bFirstUnk09, s_Actor->m_bUnk09);
+	if (s_bFirstUnk10 != s_Actor->m_bUnk10)	Logger::Info("CHANGE for m_bUnk10: {} -> {}", s_bFirstUnk10, s_Actor->m_bUnk10);
+	if (s_bFirstUnk11 != s_Actor->m_bUnk11)	Logger::Info("CHANGE for m_bUnk11: {} -> {}", s_bFirstUnk11, s_Actor->m_bUnk11);
+	if (s_bFirstUnk12 != s_Actor->m_bUnk12)	Logger::Info("CHANGE for m_bUnk12: {} -> {}", s_bFirstUnk12, s_Actor->m_bUnk12);
+	if (s_bFirstUnk13 != s_Actor->m_bUnk13)	Logger::Info("CHANGE for m_bUnk13: {} -> {}", s_bFirstUnk13, s_Actor->m_bUnk13);
+	if (s_bFirstUnk14 != s_Actor->m_bUnk14)	Logger::Info("CHANGE for m_bUnk14: {} -> {}", s_bFirstUnk14, s_Actor->m_bUnk14);
+	if (s_bFirstUnk15 != s_Actor->m_bUnk15)	Logger::Info("CHANGE for m_bUnk15: {} -> {}", s_bFirstUnk15, s_Actor->m_bUnk15);
+	if (s_bFirstUnk16 != s_Actor->m_bUnk16)	Logger::Info("CHANGE for m_bUnk16: {} -> {}", s_bFirstUnk16, s_Actor->m_bUnk16);
+	if (s_bFirstUnk17 != s_Actor->m_bUnk17)	Logger::Info("CHANGE for m_bUnk17: {} -> {}", s_bFirstUnk17, s_Actor->m_bUnk17);
+	if (s_bFirstUnk18 != s_Actor->m_bUnk18)	Logger::Info("CHANGE for m_bUnk18: {} -> {}", s_bFirstUnk18, s_Actor->m_bUnk18);
+	if (s_bFirstUnk19 != s_Actor->m_bUnk19)	Logger::Info("CHANGE for m_bUnk19: {} -> {}", s_bFirstUnk19, s_Actor->m_bUnk19);
+	if (s_bFirstUnk20 != s_Actor->m_bUnk20)	Logger::Info("CHANGE for m_bUnk20: {} -> {}", s_bFirstUnk20, s_Actor->m_bUnk20);
+	if (s_bFirstUnk21 != s_Actor->m_bUnk21)	Logger::Info("CHANGE for m_bUnk21: {} -> {}", s_bFirstUnk21, s_Actor->m_bUnk21);
+	if (s_bFirstUnk22 != s_Actor->m_bUnk22)	Logger::Info("CHANGE for m_bUnk22: {} -> {}", s_bFirstUnk22, s_Actor->m_bUnk22);
+	if (s_bFirstUnk23 != s_Actor->m_bUnk23)	Logger::Info("CHANGE for m_bUnk23: {} -> {}", s_bFirstUnk23, s_Actor->m_bUnk23);
+	if (s_bFirstUnk24 != s_Actor->m_bUnk24)	Logger::Info("CHANGE for m_bUnk24: {} -> {}", s_bFirstUnk24, s_Actor->m_bUnk24);
+	if (s_bFirstUnk25 != s_Actor->m_bUnk25)	Logger::Info("CHANGE for m_bUnk25: {} -> {}", s_bFirstUnk25, s_Actor->m_bUnk25);
+	if (s_bFirstUnk26 != s_Actor->m_bUnk26)	Logger::Info("CHANGE for m_bUnk26: {} -> {}", s_bFirstUnk26, s_Actor->m_bUnk26);
+	if (s_bFirstUnk27 != s_Actor->m_bUnk27)	Logger::Info("CHANGE for m_bUnk27: {} -> {}", s_bFirstUnk27, s_Actor->m_bUnk27);
+	if (s_bFirstUnk28 != s_Actor->m_bUnk28)	Logger::Info("CHANGE for m_bUnk28: {} -> {}", s_bFirstUnk28, s_Actor->m_bUnk28);
+	if (s_bFirstUnk29 != s_Actor->m_bUnk29)	Logger::Info("CHANGE for m_bUnk29: {} -> {}", s_bFirstUnk29, s_Actor->m_bUnk29);
+	if (s_bFirstUnk30 != s_Actor->m_bUnk30)	Logger::Info("CHANGE for m_bUnk30: {} -> {}", s_bFirstUnk30, s_Actor->m_bUnk30);
+	if (s_bFirstUnk31 != s_Actor->m_bUnk31)	Logger::Info("CHANGE for m_bUnk31: {} -> {}", s_bFirstUnk31, s_Actor->m_bUnk31);
+	if (s_bFirstUnk32 != s_Actor->m_bUnk32)	Logger::Info("CHANGE for m_bUnk32: {} -> {}", s_bFirstUnk32, s_Actor->m_bUnk32);
+	if (s_bFirstUnk33 != s_Actor->m_bUnk33)	Logger::Info("CHANGE for m_bUnk33: {} -> {}", s_bFirstUnk33, s_Actor->m_bUnk33);
+	if (s_bFirstBodyHidden != s_Actor->m_bBodyHidden)	Logger::Info("CHANGE for m_bBodyHidden: {} -> {}", s_bFirstBodyHidden, s_Actor->m_bBodyHidden);
+	if (s_bFirstUnk35 != s_Actor->m_bUnk35)	Logger::Info("CHANGE for m_bUnk35: {} -> {}", s_bFirstUnk35, s_Actor->m_bUnk35);
+	if (s_bFirstUnk36 != s_Actor->m_bUnk36)	Logger::Info("CHANGE for m_bUnk36: {} -> {}", s_bFirstUnk36, s_Actor->m_bUnk36);
+	if (s_bFirstUnk37 != s_Actor->m_bUnk37)	Logger::Info("CHANGE for m_bUnk37: {} -> {}", s_bFirstUnk37, s_Actor->m_bUnk37);
+	if (s_bFirstUnk38 != s_Actor->m_bUnk38)	Logger::Info("CHANGE for m_bUnk38: {} -> {}", s_bFirstUnk38, s_Actor->m_bUnk38);
+	if (s_bFirstUnk39 != s_Actor->m_bUnk39)	Logger::Info("CHANGE for m_bUnk39: {} -> {}", s_bFirstUnk39, s_Actor->m_bUnk39);
+#pragma endregion
+	Logger::Info("Done!");
+
+	m_bDoneFirstNpcTest = false;
+
+	/*ZEntityRef s_EntRef;
+	s_Actor->GetID(&s_EntRef);*/
+}
+
+/*void TestMod::DoNpcTestTick()
+{
+	const char* const s_NAME = "Edward \"Ted\" Mendez";
+
+	ZActor* s_Actor = Globals::ActorManager->GetActorByName(s_NAME); 
+	if (s_Actor == nullptr)
+	{
+		Logger::Warn("Cannot find actor named \"{}\"", s_NAME);
+		m_bDoneFirstNpcTest = false;
+		m_bDoingNpcTest = false;
+		return;
+	}
+
+	ZEntityRef s_EntRef;
+	s_Actor->GetID(&s_EntRef);
+
+	static std::vector<NpcTestProperty> s_FirstProperties;
+
+	if (!m_bDoneFirstNpcTest)
+	{
+		s_FirstProperties.clear();
+
+		auto& s_Properties = (*s_EntRef.m_pEntity)->m_pProperties01;
+
+		if (!s_Properties)
+		{
+			Logger::Info("<No Properties>");
+			return;
+		}
+
+		for (auto& s_Property : *s_Properties)
+		{
+			uint32_t s_PropertyId = s_Property.m_nPropertyId;
+			ZClassProperty* s_PropertyInfo = s_Property.m_pType->getPropertyInfo();
+
+			const char* s_PropertyName;
+			try
+			{
+				s_PropertyName = s_PropertyInfo->m_pName;
+				if (!s_PropertyName)
+					s_PropertyName = "<ERROR>";
+				else if (s_PropertyName[0] == 0)
+					s_PropertyName = "<NO NAME>";
+			}
+			catch (...)
+			{
+				s_PropertyName = "<ERROR>";
+			}
+
+			const char* s_PropertyTypeName;
+			try
+			{
+				s_PropertyTypeName = s_PropertyInfo->m_pType->m_pType->m_pTypeName;
+				if (!s_PropertyTypeName)
+					s_PropertyTypeName = "<NULL TYPE NAME>";
+				else if (s_PropertyTypeName[0] == 0)
+					s_PropertyTypeName = "<NO TYPE NAME>";
+			}
+			catch (...)
+			{
+				s_PropertyTypeName = "<ERROR TYPE>";
+			}
+
+			if (!s_PropertyName)
+				s_PropertyName = "<NULL>";
+
+			if (!s_PropertyTypeName)
+				s_PropertyTypeName = "<NULL TYPE NAME>";
+
+			s_FirstProperties.push_back({ s_PropertyId, s_PropertyTypeName, s_PropertyName });
+		}
+		
+		m_bDoneFirstNpcTest = true;
+		Logger::Info("First test");
+		return;
+	}
+
+
+
+	auto& s_Properties = (*s_EntRef.m_pEntity)->m_pProperties01;
+
+	if (!s_Properties)
+	{
+		Logger::Info("<No Properties>");
+		return;
+	}
+
+	int i = 0;
+	for (auto& s_Property : *s_Properties)
+	{
+		uint32_t s_PropertyId = s_Property.m_nPropertyId;
+		ZClassProperty* s_PropertyInfo = s_Property.m_pType->getPropertyInfo();
+
+		const char* s_PropertyName;
+		try
+		{
+			s_PropertyName = s_PropertyInfo->m_pName;
+			if (!s_PropertyName)
+				s_PropertyName = "<ERROR>";
+			else if (s_PropertyName[0] == 0)
+				s_PropertyName = "<NO NAME>";
+		}
+		catch (...)
+		{
+			s_PropertyName = "<ERROR>";
+		}
+
+		const char* s_PropertyTypeName;
+		try
+		{
+			s_PropertyTypeName = s_PropertyInfo->m_pType->m_pType->m_pTypeName;
+			if (!s_PropertyTypeName)
+				s_PropertyTypeName = "<NULL TYPE NAME>";
+			else if (s_PropertyTypeName[0] == 0)
+				s_PropertyTypeName = "<NO TYPE NAME>";
+		}
+		catch (...)
+		{
+			s_PropertyTypeName = "<ERROR TYPE>";
+		}
+
+		if (!s_PropertyName)
+			s_PropertyName = "<NULL>";
+
+		if (!s_PropertyTypeName)
+			s_PropertyTypeName = "<NULL TYPE NAME>";
+
+	
+		std::string s_PropertyValue;
+		try
+		{
+			s_PropertyValue = PropertyDataToString(s_PropertyTypeName, s_EntRef.GetProperty<void*>(s_PropertyName).Get());
+		}
+		catch (...)
+		{
+			s_PropertyValue = "<ERROR>";
+		}
+
+
+		if (
+			s_PropertyId != s_FirstProperties[i].m_id ||
+			s_PropertyTypeName != s_FirstProperties[i].m_TypeName ||
+			s_PropertyName != s_FirstProperties[i].m_Name ||
+			s_PropertyValue != s_FirstProperties[i].m_Value
+			)
+		{
+			Logger::Info(
+				"=Change {}=\n\t{}\t->\t{}\n\t{}\t->\t{}\n\t{}\t->\t{}\n\t{}\t->\t{}\n",
+				i,
+				s_PropertyId, s_FirstProperties[i].m_id,
+				s_PropertyTypeName, s_FirstProperties[i].m_TypeName,
+				s_PropertyName, s_FirstProperties[i].m_Name,
+				s_PropertyValue, s_FirstProperties[i].m_Value
+			);
+		}
+
+		++i;
+	}
+
+	m_bDoingNpcTest = false;
+	m_bDoneFirstNpcTest = false;
+
+	Logger::Info("End test");
+}*/
+
+
+
+
+DECLARE_ZHM_PLUGIN(TestMod);

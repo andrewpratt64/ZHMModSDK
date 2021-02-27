@@ -1,0 +1,645 @@
+#pragma once
+
+#include "Enums.h"
+#include "ZEntity.h"
+#include "ZPrimitives.h"
+#include "ZHM5BaseCharacter.h"
+#include "ZResource.h"
+
+class ZCharacterTemplateAspect;
+class ZCostumeFeatureCollection;
+class ZAccessoryItemPool;
+class ZItemRepositoryKeyEntity;
+class ZOutfitProfessionEntity;
+class ZAIVisionConfigurationEntity;
+class ZHTNDomainEntity;
+class ZCompiledBehaviorTree;
+class ZSpatialEntity;
+class ZKnowledge;
+
+
+#pragma region MyCode
+
+class SVector3
+{
+public:
+	float32 x; // 0x0
+	float32 y; // 0x4
+	float32 z; // 0x8
+};
+
+
+class SMatrix43
+{
+public:
+	SVector3 XAxis; // 0x0
+	SVector3 YAxis; // 0xC
+	SVector3 ZAxis; // 0x18
+	SVector3 Trans; // 0x24
+};
+
+
+class ZSpatialEntity :
+	public IEntity,
+	public ZEntityImpl
+{
+public:
+	enum class ERoomBehaviour
+	{
+		ROOM_STATIC = 0,
+		ROOM_DYNAMIC = 1,
+		ROOM_STATIC_OUTSIDE_CLIENT = 2,
+	};
+
+public:
+	ZSpatialEntity::ERoomBehaviour m_eRoomBehaviour; // 0x0
+	bool m_bForceVisible; // 0x0
+	SMatrix43 m_mTransform; // 0x0
+	bool m_bVisible; // 0x0
+	bool m_bIsPrivate; // 0x0
+	bool m_bVisibleInBoxReflection; // 0x0
+	bool m_bEnableTAA; // 0x0
+	uint8 m_nViewportVisibility; // 0x0
+	TEntityRef<ZSpatialEntity> m_eidParent; // 0x70
+};
+
+
+class IBoneAnimator
+{
+public:
+};
+
+class ZAnimSetEntity :
+	public IEntity,
+	public ZEntityImpl
+{
+public:
+	TResourcePtr<void*> m_animSetResourceID; // 0x18
+};
+
+
+class ZActorInstanceEntity :
+	public IEntity,
+	public IBoneAnimator,
+	public ZEntityImpl
+{
+public:
+	enum class EFFXMode
+	{
+		eFFX_MODE_DISABLE = 0,
+		eFFX_MODE_OVERWRITE = 1
+	};
+
+	TResourcePtr<void*> m_actorResourceID; // 0x20
+	TEntityRef<IBoneAnimator> m_BoneAnimator; // 0x28
+	ZString m_animationName; // 0x38
+	bool m_bLoop; // 0x48
+	TArray<TEntityRef<ZAnimSetEntity>> m_animSets; // 0x50
+	TArray<TEntityRef<ZAnimSetEntity>> m_AdditionalAnimSets; // 0x68
+	ZActorInstanceEntity::EFFXMode m_eBlendMode; // 0x80
+};
+
+class ZActBehaviorEntity
+{
+public:
+	enum class EState
+	{
+		UNDEFINED = 0,
+		IDLE = 1,
+		STOPPING = 2,
+		PREPARING = 3,
+		MOVING = 4,
+		ENTERING = 5,
+		RUNNING = 6,
+		TIMEDOUT = 7,
+		COMPLETE = 8,
+	};
+};
+
+
+class IMorphemeEntity :
+	public IComponentInterface
+{
+public:
+};
+
+
+class ZActorIKController :
+	public IEntity,
+	public IBoneAnimator,
+	public ZEntityImpl
+{
+public:
+	TEntityRef<IBoneAnimator> m_rBoneAnimator; // 0x20
+};
+
+
+class ZAudioEmitterEntity :
+	public IEntity,
+	public ZEntityImpl
+{
+public:
+	bool m_bIsEnabled; // 0x0
+	bool m_bForceActive; // 0x0
+	bool m_bOneShotEmitter; // 0x0
+	uint64 m_nAudioEmitterID; // 0x0
+};
+
+
+class IBoolConditionListener :
+	public IComponentInterface
+{};
+
+class IBoolCondition :
+	public IComponentInterface
+{};
+
+class ZVolumeTriggerEntity :
+	public IEntity,
+	public IBoolConditionListener,
+	public ZEntityImpl
+{
+public:
+	TArray<TEntityRef<ZSpatialEntity>> m_Spatials; // 0x20
+	TEntityRef<IBoolCondition> m_rEnableCondition; // 0x38
+	bool m_TypeHitman; // 0x48
+	bool m_TypeActorAlive; // 0x49
+	bool m_TypeActorDead; // 0x4A
+	bool m_TypeActorPacified; // 0x4B
+	bool m_TypeExplodeableItem; // 0x4C
+	bool m_TypeItem; // 0x4D
+	ZEntityRef m_pOwner; // 0x50
+	ZEntityRef m_rKeywords; // 0x58
+};
+
+
+class ZBoundedEntity :
+	public ZSpatialEntity,
+	public IEntity
+{
+public:
+};
+
+
+class ZRenderableEntity :
+	public ZBoundedEntity,
+	public ZSpatialEntity,
+	public IEntity
+{
+public:
+};
+
+
+class ZPrimitiveContainerEntity :
+	public ZRenderableEntity,
+	public ZBoundedEntity,
+	public ZSpatialEntity,
+	public IEntity
+	// Unknown interface at offset 0xD0 
+	// Unknown base class at offset 0xD0
+{
+public:
+	float32 m_fLODScale; // 0x148
+	float32 m_fLODOffset; // 0x14C
+	float32 m_fTessellationOffset; // 0x150
+	float32 m_fTessellationMaxDist; // 0x154
+	ERenderGlowTypes m_eGlowType; // 0x159
+	ETessellationMode m_eTessellationMode; // 0x15A
+	ETessellationFactorMode m_eTessellationFactorMode; // 0x15B
+	uint8 m_nTessellationMaxTessellation; // 0x15C
+	bool m_bCastShadows; // 0x15D
+	bool m_bDisableStaticShadows; // 0x15E
+	bool m_bPCCastShadows; // 0x15F
+	uint8 m_nEmissiveHdrScale; // 0x160
+};
+
+
+class ZGeomEntity :
+	public ZPrimitiveContainerEntity,
+	public ZRenderableEntity,
+	public ZBoundedEntity,
+	public ZSpatialEntity,
+	public IEntity
+	// Unknown interface at offset 0xD0 
+{
+public:
+	// ZEntityRef is a guess, might be wrong type!
+	TResourcePtr<ZEntityRef> m_VertexPaintData; // 0x170
+	ZString m_sVertexPaintSourceResourceId; // 0x178
+	ZResourcePtr m_ResourceID; // 0x188
+	SVector3 m_PrimitiveScale; // 0x190
+	ESeamFixMode m_eSeamFix; // 0x19C
+};
+
+
+class ZBodyPartEntity :
+	public IEntity,
+	public ZEntityImpl
+{
+public:
+	ZResourcePtr m_pMeshResource; // 0x18
+	// ZEntityRef is a guess, might be wrong type!
+	TResourcePtr<ZEntityRef> m_pMaterialOrgResource0; // 0x20
+	TResourcePtr<ZEntityRef> m_pMaterialOverrideResource0; // 0x28
+	TResourcePtr<ZEntityRef> m_pMaterialOrgResource1; // 0x30
+	TResourcePtr<ZEntityRef> m_pMaterialOverrideResource1; // 0x38
+	TResourcePtr<ZEntityRef> m_pMaterialOrgResource2; // 0x40
+	TResourcePtr<ZEntityRef> m_pMaterialOverrideResource2; // 0x48
+	TResourcePtr<ZEntityRef> m_pMaterialOrgResource3; // 0x50
+	TResourcePtr<ZEntityRef> m_pMaterialOverrideResource3; // 0x58
+	bool m_IsHiddenInVR; // 0x98
+};
+
+
+class IBoneWeightManagerEntity :
+	public IComponentInterface
+{
+public:
+};
+
+
+class ZLinkedEntity :
+	public ZGeomEntity,
+	public ZPrimitiveContainerEntity,
+	public ZRenderableEntity,
+	public ZBoundedEntity,
+	public ZSpatialEntity,
+	public IEntity
+	// Unknown interface at offset 0xD0 
+{
+public:
+	ZResourcePtr m_pBonesAndCollisionResource; // 0x1B0
+	TArray<TEntityRef<ZBodyPartEntity>> m_aBodyParts; // 0x1B8
+	SVector3 m_vBodypartBoundingMarginMax; // 0x1D0
+	SVector3 m_vBodypartBoundingMarginMin; // 0x1DC
+	uint32 m_nBodypartLODCutOff; // 0x1E8
+	ZResourcePtr m_BodyPartLODCutOffMeshResource; // 0x1EC
+	TEntityRef<IBoneAnimator> m_BoneAnimator; // 0x1F8
+	TEntityRef<IBoneWeightManagerEntity> m_BoneWeightManagerEntity; // 0x208
+};
+
+
+class ZPhysicsBaseEntity :
+	public IEntity,
+	public ZEntityImpl
+{};
+
+class ZPhysicsSystemEntity :
+	public ZPhysicsBaseEntity,
+	public IEntity,
+	public IBoneAnimator
+	// Unknown interface at offset 0x28
+	// Unknown base class at offset 0x28
+{
+public:
+	bool m_bActive; // 0x30
+	// ZEntityRef is a guess, might be wrong type!
+	TResourcePtr<ZEntityRef> m_pPhysicsSystem; // 0x34
+	TResourcePtr<ZEntityRef> m_pPhysicsSystemSecondary; // 0x3C
+	TEntityRef<ZLinkedEntity> m_pLinkedEntity; // 0x48
+};
+
+
+class ZAudioEventEntityBase :
+	public IEntity,
+	// Unknown interface at offset 0x18 
+	public ZEntityImpl
+	// Unknown base class at offset 0x18
+{
+public:
+	bool m_bIsEnabled; // 0x20
+	bool m_bStopAtSceneReset; // 0x21
+	bool m_bStopAtEntityDeletion; // 0x22
+	bool m_bSavable; // 0x23
+	TEntityRef<ZAudioEmitterEntity> m_pEmitter; // 0x28
+	TArray<TEntityRef<ZAudioEmitterEntity>> m_aEmitters; // 0x38
+	AudioEventCullingBehavior m_eCullingBehavior; // 0x50
+	float32 m_fMaxDistance; // 0x54
+	float32 m_fTransitionTime; // 0x58
+	AudioCurve m_eTransitionCurve; // 0x5C
+	bool m_bUseOcclusionForCulling; // 0x5D
+	float32 Attenuation; // 0x0
+	float32 LowPassFilter; // 0x0
+};
+
+
+class ZAudioEventEntity :
+	public ZAudioEventEntityBase,
+	public IEntity
+	// Unknown interface at offset 0x18 
+{
+public:
+	// ZEntityRef is a guess, might be wrong type!
+	TResourcePtr<ZEntityRef> m_pMainEvent; // 0x88
+	TResourcePtr<ZEntityRef> m_pStopEvent; // 0x90
+	bool m_bDisableEventFlagsOnStopEvents; // 0x98
+	bool m_bMainEventEndedOnStop; // 0x99
+};
+
+
+class IChildNetworkEntity :
+	public IComponentInterface
+{
+public:
+};
+
+
+class ZCharacterTemplateAspect :
+	public IEntity,
+	public ZEntityImpl
+{
+public:
+	TEntityRef<IMorphemeEntity> m_rMorphemeEntity; // 0x18
+	TEntityRef<ZActorIKController> m_rActorIKController; // 0x28
+	TEntityRef<ZAudioEmitterEntity> m_pDialogueAudioEmitter; // 0x38
+	TEntityRef<ZActorInstanceEntity> m_pActorInstance; // 0x48
+	ZEntityRef m_Animator; // 0x58
+	TEntityRef<ZVolumeTriggerEntity> m_rVolumeTrigger; // 0x60
+	TEntityRef<ZPhysicsSystemEntity> m_rRagdollEntity; // 0x70
+	TEntityRef<ZAudioEventEntity> m_rRagdollImpactAudioEvent; // 0x80
+	TEntityRef<IChildNetworkEntity> m_rReactionNetwork; // 0x90
+	bool m_bPreferredInvestigator; // 0xA0
+	TArray<ZString> m_StatLabelList; // 0xA8
+};
+
+
+class ZBoneAttachEntity :
+	public IEntity,
+	public ZEntityImpl
+{
+public:
+	enum class EResetMode
+	{
+		eAtBoneOrigin = 0,
+		eKeepOffset = 1,
+	};
+
+	TEntityRef<ZLinkedEntity> m_linkedEntity; // 0x18
+	ZString m_BoneName; // 0x28
+	TEntityRef<ZSpatialEntity> m_spatial; // 0x38
+	bool m_bStartAttached; // 0x48
+	ZBoneAttachEntity::EResetMode m_eResetMode; // 0x4C
+};
+
+
+class ZCostumeFeature :
+	public IEntity,
+	public ZEntityImpl
+{
+public:
+	TEntityRef<ZSpatialEntity> m_rSpatial; // 0x18
+	TEntityRef<ZBoneAttachEntity> m_rBoneAttacher; // 0x28
+};
+
+class ZCostumeFeatureCollection :
+	public IEntity,
+	public ZEntityImpl
+{
+public:
+	TArray<TEntityRef<ZCostumeFeature>> m_aFeatures; // 0x18
+};
+
+#pragma endregion
+
+
+
+class ICharacterCollision :
+	public IComponentInterface
+{
+public:
+	virtual ~ICharacterCollision() {}
+	virtual void ICharacterCollision_unk00() = 0;
+};
+
+class IActor
+{
+public:
+	virtual void IActor_unk00() = 0;
+	virtual void RequestDisable() = 0;
+	virtual void IActor_unk02() = 0;
+	virtual void IActor_unk03() = 0;
+	virtual void IActor_unk04() = 0;
+	virtual void IActor_unk05() = 0;
+	virtual void IActor_unk06() = 0;
+	virtual void IActor_unk07() = 0;
+	virtual void IActor_unk08() = 0;
+	virtual void IActor_unk09() = 0;
+	virtual bool IsDead() = 0;
+	virtual bool IsAlive() = 0;
+	virtual bool IsPacified() = 0;
+	virtual void IActor_unk13() = 0;
+	virtual void IActor_unk14() = 0;
+	virtual void IActor_unk15() = 0;
+	virtual void IActor_unk16() = 0;
+	virtual void IActor_unk17() = 0;
+	virtual void IActor_unk18() = 0;
+	virtual void IActor_unk19() = 0;
+	virtual ZKnowledge* Knowledge() = 0;
+	virtual void IActor_unk21() = 0;
+	virtual void IActor_unk22() = 0;
+	virtual void IActor_unk23() = 0;
+	virtual void IActor_unk24() = 0;
+	virtual void IActor_unk25() = 0;
+	virtual void IActor_unk26() = 0;
+	virtual void IActor_unk27() = 0;
+	virtual void IActor_unk28() = 0;
+	virtual void IActor_unk29() = 0;
+	virtual void IActor_unk30() = 0;
+	virtual void IActor_unk31() = 0;
+	virtual void IActor_unk32() = 0;
+	virtual void IActor_unk33() = 0;
+	virtual void IActor_unk34() = 0;
+	virtual void IActor_unk35() = 0;
+	virtual void IActor_unk36() = 0;
+	virtual void IActor_unk37() = 0;
+	virtual void IActor_unk38() = 0;
+	virtual void IActor_unk39() = 0;
+	virtual void IActor_unk40() = 0;
+	virtual void IActor_unk41() = 0;
+	virtual void IActor_unk42() = 0;
+	virtual void IActor_unk43() = 0;
+	virtual void IActor_unk44() = 0;
+	virtual void IActor_unk45() = 0;
+	virtual void IActor_unk46() = 0;
+	virtual void IActor_unk47() = 0;
+	virtual void IActor_unk48() = 0;
+	virtual void IActor_unk49() = 0;
+	virtual void IActor_unk50() = 0;
+	virtual void IActor_unk51() = 0;
+	virtual void IActor_unk52() = 0;
+	virtual void IActor_unk53() = 0;
+	virtual void IActor_unk54() = 0;
+};
+
+class IActorProxy :
+	public IComponentInterface
+{
+public:
+	virtual ~IActorProxy() {}
+	virtual void IActorProxy_unk00() = 0;
+};
+
+class ISequenceTarget
+{
+public:
+	virtual void ISequenceTarget_unk00() = 0;
+	virtual void ISequenceTarget_unk01() = 0;
+	virtual void ISequenceTarget_unk02() = 0;
+};
+
+class ISequenceAudioPlayer :
+	public IComponentInterface
+{
+public:
+	virtual ~ISequenceAudioPlayer() {}
+	virtual void ISequenceAudioPlayer_unk00() = 0;
+	virtual void ISequenceAudioPlayer_unk01() = 0;
+	virtual void ISequenceAudioPlayer_unk02() = 0;
+	virtual void ISequenceAudioPlayer_unk03() = 0;
+};
+
+class ICrowdAIActor :
+	public IComponentInterface
+{
+public:
+	virtual ~ICrowdAIActor() {}
+	virtual void ICrowdAIActor_unk00() = 0;
+	virtual void ICrowdAIActor_unk01() = 0;
+	virtual void ICrowdAIActor_unk02() = 0;
+};
+
+// Size = 0x1410
+class ZActor :
+	public ZHM5BaseCharacter,
+	public ICharacterCollision,
+	public IActor,
+	public IActorProxy,
+	public ISequenceTarget,
+	public ISequenceAudioPlayer,
+	public ICrowdAIActor
+{
+public:
+	PAD(0x100); // 0x300
+	bool m_bStartEnabled; // 0x400
+	TEntityRef<ZCharacterTemplateAspect> m_rCharacter; // 0x408
+	bool m_bBlockDisguisePickup; // 0x418
+	ZRepositoryID m_OutfitRepositoryID; // 0x420
+	int32 m_nOutfitCharset; // 0x430
+	int32 m_nOutfitVariation; // 0x434
+	TEntityRef<ZCostumeFeatureCollection> m_pCostumeFeatures; // 0x438
+	TEntityRef<ZAccessoryItemPool> m_pAccessoryItemPool; // 0x448
+	TArray<TEntityRef<ZItemRepositoryKeyEntity>> m_InventoryItemKeys; // 0x458
+	TArray<TEntityRef<ZOutfitProfessionEntity>> m_aEnforcedOutfits; // 0x470
+	ZString m_sActorName; // 0x488
+	EActorGroup m_eActorGroup; // 0x498
+	TResourcePtr<ZCompiledBehaviorTree> m_pCompiledBehaviorTree; // 0x49C
+	EActorVoiceVariation m_eRequiredVoiceVariation; // 0x4A4
+	TResourcePtr<ZSpatialEntity> m_pBodybagResource; // 0x4A8
+	bool m_bWeaponUnholstered; // 0x4B0
+	int32 m_nWeaponIndex; // 0x4B4
+	int32 m_nGrenadeIndex; // 0x4B8
+	bool m_bIsGrenadeDroppable; // 0x4BC
+	bool m_bEnableOutfitModifiers; // 0x4BD
+	TEntityRef<ZAIVisionConfigurationEntity> m_AgentVisionConfiguration; // 0x4C0
+	TEntityRef<ZHTNDomainEntity> m_DomainConfig; // 0x4D0
+	PAD(0xC70); // 0x4E0
+	bool m_bUnk00 : 1; // 0x1150
+	bool m_bUnk01 : 1;
+	bool m_bUnk02 : 1;
+	bool m_bUnk03 : 1;
+	bool m_bUnk04 : 1;
+	bool m_bUnk05 : 1;
+	bool m_bIsBeingDragged : 1;
+	bool m_bIsBeingDumped : 1;
+	bool m_bUnk08 : 1; // 0x1151
+	bool m_bUnk09 : 1;
+	bool m_bUnk10 : 1;
+	bool m_bUnk11 : 1;
+	bool m_bUnk12 : 1;
+	bool m_bUnk13 : 1;
+	bool m_bUnk14 : 1;
+	bool m_bUnk15 : 1;
+	bool m_bUnk16 : 1; // 0x1152
+	bool m_bUnk17 : 1;
+	bool m_bUnk18 : 1;
+	bool m_bUnk19 : 1;
+	bool m_bUnk20 : 1;
+	bool m_bUnk21 : 1;
+	bool m_bUnk22 : 1;
+	bool m_bUnk23 : 1;
+	bool m_bUnk24 : 1; // 0x1153
+	bool m_bUnk25 : 1;
+	bool m_bUnk26 : 1;
+	bool m_bUnk27 : 1;
+	bool m_bUnk28 : 1;
+	bool m_bUnk29 : 1;
+	bool m_bUnk30 : 1;
+	bool m_bUnk31 : 1;
+	bool m_bUnk32 : 1; // 0x1154
+	bool m_bUnk33 : 1;
+	bool m_bBodyHidden : 1;
+	bool m_bUnk35 : 1;
+	bool m_bUnk36 : 1;
+	bool m_bUnk37 : 1;
+	bool m_bUnk38 : 1;
+	bool m_bUnk39 : 1;
+	PAD(0x2B8);	
+};
+
+class ZActorManager :
+	public IComponentInterface
+{	
+public:
+	virtual ~ZActorManager() {}
+
+
+	/**
+	 * Get an actor by their name
+	 *
+	 * Author: Andrew Pratt
+	 * Param p_Name: Actor's name
+	 * Returns: Pointer to actor, or nullptr if no actor with a matching name was found
+	 */
+	ZActor* GetActorByName(const char* p_Name)
+	{
+		for (int i = 0; i < *Globals::NextActorId; ++i)
+		{
+			auto* s_Actor = m_aActiveActors[i].m_pInterfaceRef;
+
+			if (strcmp(s_Actor->m_sActorName.c_str(), p_Name) == 0)
+				return s_Actor;
+		}
+		return nullptr;
+	}
+
+	ZActor* GetActorByName(const std::string p_Name)
+	{
+		return GetActorByName(p_Name.c_str());
+	}
+
+	/**
+	 * Get an actor by their entity id
+	 *
+	 * Author: Andrew Pratt
+	 * Param p_id: Actor's entity id
+	 * Returns: Pointer to actor, or nullptr if no actor with a matching name was found
+	*/
+	ZActor* GetActorById(uint64_t p_id)
+	{
+		for (int i = 0; i < *Globals::NextActorId; ++i)
+		{
+			auto* s_Actor = Globals::ActorManager->m_aActiveActors[i].m_pInterfaceRef;
+			ZEntityRef s_EntRef;
+			s_Actor->GetID(&s_EntRef);
+
+			if ((*s_EntRef.m_pEntity)->m_nEntityId == p_id)
+				return s_Actor;
+		}
+		return nullptr;
+	}
+
+
+public:
+	PAD(0x1F60);
+	TEntityRef<ZActor> m_aActiveActors[1000]; // 0x1F68
+};

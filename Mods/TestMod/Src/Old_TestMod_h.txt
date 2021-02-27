@@ -1,0 +1,183 @@
+#pragma once
+// Andrew Pratt 2021
+// TestMod
+
+#include<vector>
+
+#include "IPluginInterface.h"
+#include "Glacier/ZEntity.h"
+#include "Glacier/ZActor.h"
+#include "TestModUtil.h"
+
+
+class TestMod : public IPluginInterface
+{
+	//friend class TestModUtil;
+
+//protected:
+public:
+	class SVector3
+	{
+	public:
+		float32 x; // 0x0
+		float32 y; // 0x4
+		float32 z; // 0x8
+	};
+
+
+	class SMatrix43
+	{
+	public:
+		SVector3 XAxis; // 0x0
+		SVector3 YAxis; // 0xC
+		SVector3 ZAxis; // 0x18
+		SVector3 Trans; // 0x24
+	};
+
+
+	class ZSpatialEntity :
+		public IEntity,
+		public ZEntityImpl
+	{
+	public:
+		enum class ERoomBehaviour
+		{
+			ROOM_STATIC = 0,
+			ROOM_DYNAMIC = 1,
+			ROOM_STATIC_OUTSIDE_CLIENT = 2,
+		};
+
+	public:
+		ZSpatialEntity::ERoomBehaviour m_eRoomBehaviour; // 0x0
+		bool m_bForceVisible; // 0x0
+		SMatrix43 m_mTransform; // 0x0
+		bool m_bVisible; // 0x0
+		bool m_bIsPrivate; // 0x0
+		bool m_bVisibleInBoxReflection; // 0x0
+		bool m_bEnableTAA; // 0x0
+		uint8 m_nViewportVisibility; // 0x0
+		TEntityRef<ZSpatialEntity> m_eidParent; // 0x70
+	};
+
+
+	class IBoneAnimator
+	{
+	public:
+	};
+
+	class ZAnimSetEntity :
+		public IEntity,
+		public ZEntityImpl
+	{
+	public:
+		TResourcePtr<void*> m_animSetResourceID; // 0x18
+	};
+
+
+	class ZActorInstanceEntity :
+		public IEntity,
+		public IBoneAnimator,
+		public ZEntityImpl
+	{
+	public:
+		enum class EFFXMode
+		{
+			eFFX_MODE_DISABLE = 0,
+			eFFX_MODE_OVERWRITE = 1
+		};
+
+		TResourcePtr<void*> m_actorResourceID; // 0x20
+		TEntityRef<IBoneAnimator> m_BoneAnimator; // 0x28
+		ZString m_animationName; // 0x38
+		bool m_bLoop; // 0x48
+		TArray<TEntityRef<ZAnimSetEntity>> m_animSets; // 0x50
+		TArray<TEntityRef<ZAnimSetEntity>> m_AdditionalAnimSets; // 0x68
+		ZActorInstanceEntity::EFFXMode m_eBlendMode; // 0x80
+	};
+
+	class ZActBehaviorEntity
+	{
+	public:
+		enum class EState
+		{
+			UNDEFINED = 0,
+			IDLE = 1,
+			STOPPING = 2,
+			PREPARING = 3,
+			MOVING = 4,
+			ENTERING = 5,
+			RUNNING = 6,
+			TIMEDOUT = 7,
+			COMPLETE = 8,
+		};
+	};
+
+public:
+	TestMod();
+	~TestMod() override;
+
+	void Init() override;
+	void OnEngineInitialized() override;
+
+private:
+	void OnFrameUpdate(const SGameUpdateEvent& p_UpdateEvent);
+
+	float32 cosf32(double p_X);
+	float32 cosf32(float32 p_X);
+	float32 sinf32(double p_X);
+	float32 sinf32(float32 p_X);
+
+	void DumpEntityProperties(ZEntityRef& p_Ent);
+	
+private:
+	DEFINE_PLUGIN_DETOUR(TestMod, LRESULT, WndProc, ZApplicationEngineWin32*, HWND, UINT, WPARAM, LPARAM)
+
+	DEFINE_PLUGIN_DETOUR(TestMod, bool, GetPropertyValue, ZEntityRef, uint32_t, void*)
+	DEFINE_PLUGIN_DETOUR(TestMod, bool, SetPropertyValue, ZEntityRef, uint32_t, const ZObjectRef&, bool)
+
+	DEFINE_PLUGIN_DETOUR(TestMod, bool, SignalOutputPin, ZEntityRef, uint32_t, const ZObjectRef&)
+	DEFINE_PLUGIN_DETOUR(TestMod, bool, SignalInputPin, ZEntityRef, uint32_t, const ZObjectRef&)
+
+	DEFINE_PLUGIN_LISTENER(TestMod, OnConsoleCommand)
+
+#pragma region PropertyDataToStringSection
+		std::string PropertyDataToString(const std::string& p_TypeName, void* p_Data);
+
+	std::string ToString(const SVector3& v);
+	std::string ToString(const SMatrix43& v);
+	std::string ToString(const ZString& v);
+	std::string ToString(const ZActBehaviorEntity::EState& v);
+	std::string ToString(const ZSpatialEntity& v);
+	std::string ToString(const ZSpatialEntity::ERoomBehaviour& v);
+	std::string ToString(const ZResourcePtr& v);
+	std::string ToString(const ZActorInstanceEntity& v);
+
+	std::string ToString(const TEntityRef<ZSpatialEntity>& v);
+	std::string ToString(const TEntityRef<ZResourcePtr>& v);
+	std::string ToString(const TEntityRef<ZActorInstanceEntity>& v);
+#pragma endregion
+
+
+private:
+	bool m_bLogPins = false;
+	bool s_bDoNpcPinLogging = false;
+	std::vector<uint64_t> m_DumpedEnts;
+	std::vector<uint32_t> m_DumpedPins;
+	std::string m_NpcName = "";
+
+	
+public:
+	struct NpcTestProperty
+	{
+		uint32_t m_id;
+		std::string m_TypeName;
+		std::string m_Name;
+		std::string m_Value;
+	};
+
+	void DoNpcTestTick();
+	bool m_bDoingNpcTest = false;
+	bool m_bDoneFirstNpcTest = false;
+};
+
+DEFINE_ZHM_PLUGIN(TestMod)
