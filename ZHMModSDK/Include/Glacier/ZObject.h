@@ -58,7 +58,7 @@ public:
 		return m_pTypeID == nullptr || m_pData == nullptr || Hash::Crc32(m_pTypeID->typeInfo()->m_pTypeName) == ZHMTypeId<void>;
 	}
 
-protected:
+public:
 	STypeID* m_pTypeID = nullptr;
 	void* m_pData = nullptr;
 };
@@ -171,4 +171,11 @@ private:
 class ZDynamicObject :
 	public ZObjectRef
 {
+};
+
+class SDynamicObjectKeyValuePair
+{
+public:
+	ZString sKey; // 0x0
+	ZDynamicObject value; // 0x10
 };

@@ -19,6 +19,32 @@ class SVector3
 public:
 	SVector3() : x(0.f), y(0.f), z(0.f) {}
 	SVector3(float p_X, float p_Y, float p_Z) : x(p_X), y(p_Y), z(p_Z) {}
+
+
+	SVector3 operator+(const SVector3& p_other) const
+	{
+		SVector3 s_vec = SVector3(*this);
+		s_vec.x += p_other.x;
+		s_vec.y += p_other.y;
+		s_vec.z += p_other.z;
+		return s_vec;
+	}
+
+	SVector3 operator-(const SVector3& p_other) const
+	{
+		SVector3 s_vec = SVector3(*this);
+		s_vec.x -= p_other.x;
+		s_vec.y -= p_other.y;
+		s_vec.z -= p_other.z;
+		return s_vec;
+	}
+
+
+	float DistSqrdTo(const SVector3& p_other) const
+	{
+		return pow(p_other.x - this->x, 2) + pow(p_other.y - this->y, 2) + pow(p_other.z - this->z, 2);
+	}
+
 	
 public:
 	float32 x; // 0x0
